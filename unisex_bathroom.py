@@ -1,7 +1,10 @@
-from threading import Condition, Lock, Thread
+from __future__ import annotations
+
 import random
-import time
 import threading
+import time
+from dataclasses import dataclass
+from threading import Condition, Lock, Thread
 
 START = time.time()
 
@@ -15,85 +18,67 @@ def log(message: str):
         print(f"{now:.3f} {thread_name}: {message}")
 
 
-class UnisexBathroom:
+@dataclass
+class Gender:
     _condition: Condition
-    _males_queued: int
-    _females_queued: int
-    _males_entered: int
-    _females_entered: int
-    _males_finished: int
-    _females_finished: int
+    _name: str
+    _queued: int = 0
+    _entered: int = 0
+    _finished: int = 0
+    _other: Gender | None = None
+
+    def enqueue(self):
+        with self._condition:
+            id_ = self._queued
+            self._queued += 1
+            log(f"{self._name} {id_} waiting")
+            self._condition.wait_for(lambda: self._can_enter(id_))
+            self._entered += 1
+            log(f"{self._name} {id_} entering")
+
+    def exit(self):
+        with self._condition:
+            self._finished += 1
+            self._condition.notify_all()
+            log(f"{self._name} exiting")
+
+    def _can_enter(self, id_: int):
+        if self._other is None:
+            raise ValueError("Gender.other must be set")
+        no_other_inside = self._other._entered == self._other._finished
+        less_than_3_inside = self._finished + 3 > id_
+        return no_other_inside and less_than_3_inside
+
+
+class UnisexBathroom:
+    males: Gender
+    females: Gender
 
     def __init__(self):
-        self._condition = Condition()
-        self._males_queued = 0
-        self._females_queued = 0
-        self._males_entered = 0
-        self._females_entered = 0
-        self._males_finished = 0
-        self._females_finished = 0
-
-    def enqueue_male(self):
-        with self._condition:
-            id_ = self._males_queued
-            self._males_queued += 1
-            log(f"male {id_} waiting")
-            self._condition.wait_for(lambda: self._male_can_enter(id_))
-            self._males_entered += 1
-            log(f"male {id_} entering")
-
-    def _male_can_enter(self, id_: int):
-        no_females_inside = self._females_entered == self._females_finished
-        less_than_3_males_inside = (self._males_finished + 3) > id_
-        return no_females_inside and less_than_3_males_inside
-
-    def male_finished(self):
-        with self._condition:
-            self._males_finished += 1
-            self._condition.notify_all()
-            log("male exiting")
-
-    def enqueue_female(self):
-        with self._condition:
-            id_ = self._females_queued
-            self._females_queued += 1
-            log(f"female {id_} waiting")
-            self._condition.wait_for(lambda: self._female_can_enter(id_))
-            self._females_entered += 1
-            log(f"female {id_} entering")
-
-    def _female_can_enter(self, id_: int):
-        no_males_inside = self._males_entered == self._males_finished
-        less_than_3_females_inside = (self._females_finished + 3) > id_
-        return no_males_inside and less_than_3_females_inside
-
-    def female_finished(self):
-        with self._condition:
-            self._females_finished += 1
-            self._condition.notify_all()
-            log("female exiting")
+        condition = Condition()
+        self.males = Gender(condition, "male")
+        self.females = Gender(condition, "female")
+        self.males._other = self.females
+        self.females._other = self.males
 
 
-def male(bathroom: UnisexBathroom):
+def person(gender: Gender):
     time.sleep(random.random() * 10)
-    bathroom.enqueue_male()
+    gender.enqueue()
     time.sleep(random.random() * 2)
-    bathroom.male_finished()
-
-
-def female(bathroom: UnisexBathroom):
-    time.sleep(random.random() * 10)
-    bathroom.enqueue_female()
-    time.sleep(random.random() * 2)
-    bathroom.female_finished()
+    gender.exit()
 
 
 def main():
     bathroom = UnisexBathroom()
 
     threads = [
-        Thread(target=male, args=(bathroom,), name=f"Male-{i}") for i in range(10)
-    ] + [Thread(target=female, args=(bathroom,), name=f"Female-{i}") for i in range(10)]
+        Thread(target=person, args=(bathroom.males,), name=f"Male-{i}")
+        for i in range(10)
+    ] + [
+        Thread(target=person, args=(bathroom.females,), name=f"Female-{i}")
+        for i in range(10)
+    ]
 
     for t in threads:
         t.start()
