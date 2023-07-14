@@ -18,91 +18,85 @@ def log(message: str):
 
 
 class Ride:
-    barrier: Barrier
-    lock: Lock
-    driver_chosen: bool
-    passengers: list[str]
+    _barrier: Barrier
+    _passengers: list[str]
 
     def __init__(self):
-        self.barrier = Barrier(4)
-        self.lock = Lock()
-        self.driver_chosen = False
-        self.passengers = []
+        self._barrier = Barrier(4)
+        self._lock = Lock()
+        self._driver_chosen = False
+        self._passengers = []
 
-    def drive(self):
-        log(f"driving {self.passengers}")
+    def _drive(self):
+        log(f"driving {self._passengers}")
 
-    def take_seat(self) -> bool:
-        self.passengers.append(threading.current_thread().name)
+    def take_seat(self):
+        name = threading.current_thread().name
+        self._passengers.append(name)
         log("seated")
-        self.barrier.wait()
-        with self.lock:
-            if self.driver_chosen:
-                return False
-            else:
-                self.driver_chosen = True
-                return True
+        self._barrier.wait()
+        if name == self._passengers[0]:
+            self._drive()
 
 
 class Uber:
-    democrats: deque[Queue]
-    republicans: deque[Queue]
-    lock: Lock
+    _democrats: deque[Queue]
+    _republicans: deque[Queue]
+    _lock: Lock
 
     def __init__(self):
-        self.democrats = deque()
-        self.republicans = deque()
-        self.lock = Lock()
+        self._democrats = deque()
+        self._republicans = deque()
+        self._lock = Lock()
 
     def order_uber_democrat(self) -> Ride:
         log("waiting")
         queue = Queue(1)
-        with self.lock:
-            self.democrats.append(queue)
-            self.try_find_ride()
+        with self._lock:
+            self._democrats.append(queue)
+            self._try_find_ride()
         return queue.get()
 
     def order_uber_republican(self) -> Ride:
         log("waiting")
         queue = Queue(1)
-        with self.lock:
-            self.republicans.append(queue)
-            self.try_find_ride()
+        with self._lock:
+            self._republicans.append(queue)
+            self._try_find_ride()
         return queue.get()
 
-    def try_find_ride(self):
-        if len(self.democrats) >= 2 and len(self.republicans) >= 2:
+    def _try_find_ride(self):
+        if len(self._democrats) >= 2 and len(self._republicans) >= 2:
             ride = Ride()
             for _ in range(2):
-                self.democrats.popleft().put(ride)
+                self._democrats.popleft().put(ride)
             for _ in range(2):
-                self.republicans.popleft().put(ride)
+                self._republicans.popleft().put(ride)
             return
-        if len(self.democrats) >= 4:
+        if len(self._democrats) >= 4:
             ride = Ride()
             for _ in range(4):
-                self.democrats.popleft().put(ride)
+                self._democrats.popleft().put(ride)
             return
-        if len(self.republicans) >= 4:
+        if len(self._republicans) >= 4:
             ride = Ride()
             for _ in range(4):
-                self.republicans.popleft().put(ride)
+                self._republicans.popleft().put(ride)
             return
 
 
 def democrat(uber: Uber):
     time.sleep(random.random() * 10)
     ride = uber.order_uber_democrat()
-    if ride.take_seat():
-        ride.drive()
+    time.sleep(random.random())
+    ride.take_seat()
 
 
 def republican(uber: Uber):
     time.sleep(random.random() * 10)
     ride = uber.order_uber_republican()
     time.sleep(random.random())
-    if ride.take_seat():
-        ride.drive()
+    ride.take_seat()
 
 
 def main():
