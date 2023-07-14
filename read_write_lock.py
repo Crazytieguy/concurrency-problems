@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import random
 import threading
 import time
@@ -25,6 +26,18 @@ class ReadWriteLock:
         self._condition = Condition()
         self._readers = 0
         self._writers_waiting = 0
+
+    @contextmanager
+    def read(self):
+        self.acquire_read()
+        yield
+        self.release_read()
+
+    @contextmanager
+    def write(self):
+        self.acquire_write()
+        yield
+        self.release_write()
 
     def acquire_read(self):
         with self._condition:
@@ -59,21 +72,19 @@ class Counter:
 
 def reader(rw_lock: ReadWriteLock, counter: Counter):
     for _ in range(20):
-        rw_lock.acquire_read()
-        before_sleep = counter.value
-        time.sleep(random.random())
-        after_sleep = counter.value
-        log(f"{before_sleep=}, {after_sleep=}")
-        rw_lock.release_read()
+        with rw_lock.read():
+            before_sleep = counter.value
+            time.sleep(random.random())
+            after_sleep = counter.value
+            log(f"{before_sleep=}, {after_sleep=}")
 
 
 def writer(rw_lock: ReadWriteLock, counter: Counter):
     for _ in range(5):
         time.sleep(random.random() * 3)
-        rw_lock.acquire_write()
-        log("incrementing")
-        counter.inc()
-        rw_lock.release_write()
+        with rw_lock.write():
+            log("incrementing")
+            counter.inc()
 
 
 def main():
