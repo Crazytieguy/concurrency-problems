@@ -6,11 +6,6 @@ from threading import BoundedSemaphore, Thread
 START = time.time()
 
 
-def set_start():
-    global START
-    START = time.time()
-
-
 def log(message: str):
     thread_name = threading.current_thread().name
     now = time.time() - START
@@ -53,8 +48,6 @@ def consumer_thread(i: int, bucket: TockenBucket):
 
 
 def main():
-    set_start()
-    
     bucket = TockenBucket()
 
     threads = [consumer_thread(i, bucket) for i in range(4)]
